@@ -63,3 +63,15 @@ from src.matching.matcher import calculate_score
 
 calculate_score("to be", TEST_SENTENCES[0])
 ```
+
+## Data loader conventions
+
+`load_sentences` recursively reads all `.txt` files under the provided root directory.
+
+- Each physical line in a text file represents one sentence.
+- Offsets are **1-indexed** and represent the original line number in the source file.
+- Empty lines are skipped, but they still count toward the original line number.
+- Files are read as UTF-8.
+- If a file cannot be decoded as UTF-8, the entire file is skipped.
+- Sentence text is preserved exactly as it appears in the source file, except for line-ending characters.
+- The loader does not perform normalization, punctuation removal, matching, scoring, or ranking.
