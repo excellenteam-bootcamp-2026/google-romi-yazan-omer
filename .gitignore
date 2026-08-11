@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+
+# dataset is fetched separately, not committed (120MB+)
+data/Archive/*
+!data/Archive/.gitkeep
