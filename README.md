@@ -26,3 +26,28 @@ change these shapes without syncing with the other two owners.
 - `feature/data-loader` — Person 1
 - `feature/matching` — Person 2
 - `feature/autocomplete` — Person 3
+
+## Sample data for local debugging
+
+The real corpus (`data/Archive/*`) is 120MB+ and gitignored — it isn't in the repo.
+For local dev, `data/Archive/sample/` is a small, committed set of `.txt` files
+(including a nested subfolder, to exercise recursive loading) you can point
+`load_sentences` at directly:
+
+```python
+load_sentences("data/Archive/sample")
+```
+
+`quotes.txt` includes `"To be or not to be, that is the question."`, which has
+known worked scoring examples in the project spec — useful for Person 2 to
+sanity-check `calculate_score` against expected numbers:
+
+| Query | Expected score | Why |
+|---|---|---|
+| `To be` | 10 | exact prefix match, 5 chars incl. space |
+| `or Not` | 12 | exact match (case-insensitive), 6 chars |
+| `be, that` | 14 | exact match, 7 chars (comma ignored) |
+| `2o be` | 5 | base 10, -5 wrong 1st letter |
+| `to pe` | 8 | base 10, -2 wrong 4th letter |
+| `or knot` | 8 | base 12, -4 for added 4th letter |
+| `not be` | no match | needs 2 corrections ("to" missing) |

@@ -8,3 +8,7 @@ venv/
 # dataset is fetched separately, not committed (120MB+)
 data/Archive/*
 !data/Archive/.gitkeep
+
+# small committed dataset for local debugging (see README)
+!data/Archive/sample/
+!data/Archive/sample/**

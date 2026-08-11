@@ -1,0 +1,3 @@
+Store a Python object in a C object pointer.
+This is normally called from the tp_dealloc function.
+Information about writing a good bug report.
