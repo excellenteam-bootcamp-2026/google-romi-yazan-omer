@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 
+from src.loader.normalizer import normalize_text
 from src.models import Sentence
 
 
@@ -32,6 +33,7 @@ def load_sentences(root_path: str) -> List[Sentence]:
             sentences.append(
                 Sentence(
                     text=line,
+                    normalized_text=normalize_text(line),
                     source=str(file_path),
                     offset=offset,
                 )
