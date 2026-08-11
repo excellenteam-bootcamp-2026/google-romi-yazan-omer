@@ -17,9 +17,9 @@ change these shapes without syncing with the other two owners.
 
 | Package | Owner | Responsibility |
 |---|---|---|
-| `src/loader` | Person 1 | Read all `.txt` files under `data/Archive` (recursively) and return `Sentence` records (text, source, offset). |
-| `src/matching` | Person 2 | Normalize text (`normalizer.py`) and score a query against a `Sentence` (`matcher.py`), allowing at most one correction (substitution/insertion/deletion). |
-| `src/autocomplete` | Person 3 | Run the matcher over all sentences, rank matches, and return the top 5 as `AutoCompleteData` (ties broken alphabetically). |
+| `src/loader` | Person 1 | Read all `.txt` files under `data/Archive` (recursively), normalize each line (`normalizer.py`) into `Sentence.normalized_text`, and return `Sentence` records. Also owns candidate search (narrowing the corpus down before Person 2 scores it). |
+| `src/matching` | Person 2 | Score an already-normalized query against a `Sentence.normalized_text` (`matcher.py`), allowing at most one correction (substitution/insertion/deletion). Does not normalize anything itself. |
+| `src/autocomplete` | Person 3 | Run the matcher over the candidate sentences, rank matches, and return the top 5 as `AutoCompleteData` using each sentence's original `text` (ties broken alphabetically). |
 
 ## Branches
 
@@ -40,25 +40,26 @@ load_sentences("data/Archive/sample")
 
 `quotes.txt` includes `"To be or not to be, that is the question."`, which has
 known worked scoring examples in the project spec — useful for Person 2 to
-sanity-check `calculate_score` against expected numbers:
+sanity-check `calculate_score` against expected numbers. Note `calculate_score`
+expects an **already-normalized** query (lowercase, no punctuation):
 
-| Query | Expected score | Why |
+| Query (pre-normalized) | Expected score | Why |
 |---|---|---|
-| `To be` | 10 | exact prefix match, 5 chars incl. space |
-| `or Not` | 12 | exact match (case-insensitive), 6 chars |
-| `be, that` | 14 | exact match, 7 chars (comma ignored) |
+| `to be` | 10 | exact prefix match, 5 chars incl. space |
+| `or not` | 12 | exact match, 6 chars |
+| `be that` | 14 | exact match, 7 chars (comma already removed) |
 | `2o be` | 5 | base 10, -5 wrong 1st letter |
 | `to pe` | 8 | base 10, -2 wrong 4th letter |
 | `or knot` | 8 | base 12, -4 for added 4th letter |
 | `not be` | no match | needs 2 corrections ("to" missing) |
 
 For unit tests, `tests/fixtures.py` has the same data already as `Sentence`
-objects (`TEST_SENTENCES`), so `matching`/`autocomplete` can be tested without
-going through the loader at all:
+objects (`TEST_SENTENCES`, including `normalized_text`), so `matching`/`autocomplete`
+can be tested without going through the loader at all:
 
 ```python
 from tests.fixtures import TEST_SENTENCES
 from src.matching.matcher import calculate_score
 
-calculate_score("To be", TEST_SENTENCES[0])
+calculate_score("to be", TEST_SENTENCES[0])
 ```

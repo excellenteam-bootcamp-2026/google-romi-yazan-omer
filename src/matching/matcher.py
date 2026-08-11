@@ -1,6 +1,5 @@
 from typing import Optional
 
-from src.matching.normalizer import normalize_text
 from src.models import Sentence
 
 _SUBSTITUTION_PENALTIES = {1: 5, 2: 4, 3: 3, 4: 2}
@@ -48,8 +47,9 @@ def _score_one_apart(shorter: str, longer: str) -> Optional[int]:
 
 
 def calculate_score(query: str, sentence: Sentence) -> Optional[int]:
-    normalized_query = normalize_text(query)
-    normalized_sentence = normalize_text(sentence.text)
+    """query and sentence.normalized_text are expected to already be normalized."""
+    normalized_query = query
+    normalized_sentence = sentence.normalized_text
     query_len = len(normalized_query)
 
     best_score = None
