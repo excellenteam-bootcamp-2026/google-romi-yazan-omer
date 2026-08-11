@@ -51,3 +51,14 @@ sanity-check `calculate_score` against expected numbers:
 | `to pe` | 8 | base 10, -2 wrong 4th letter |
 | `or knot` | 8 | base 12, -4 for added 4th letter |
 | `not be` | no match | needs 2 corrections ("to" missing) |
+
+For unit tests, `tests/fixtures.py` has the same data already as `Sentence`
+objects (`TEST_SENTENCES`), so `matching`/`autocomplete` can be tested without
+going through the loader at all:
+
+```python
+from tests.fixtures import TEST_SENTENCES
+from src.matching.matcher import calculate_score
+
+calculate_score("To be", TEST_SENTENCES[0])
+```
