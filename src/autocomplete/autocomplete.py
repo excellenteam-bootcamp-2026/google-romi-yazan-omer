@@ -7,27 +7,27 @@ from src.models import AutoCompleteData, Sentence
 
 def get_best_completions(
     query: str,
-    sentences: List[Sentence],
+    candidates: List[Sentence],
 ) -> List[AutoCompleteData]:
-    """Return the top 5 matches, ranked by score desc, then alphabetically."""
+    """Score candidate sentences and return the five best completions."""
 
-    def matching_completions() -> Iterator[AutoCompleteData]:
-        for sentence in sentences:
-            score = calculate_score(query, sentence)
+    def valid_completions() -> Iterator[AutoCompleteData]:
+        for candidate in candidates:
+            score = calculate_score(query, candidate)
 
             if score is None:
                 continue
 
             yield AutoCompleteData(
-                completed_sentence=sentence.text,
-                source_text=sentence.source,
-                offset=sentence.offset,
+                completed_sentence=candidate.text,
+                source_text=candidate.source,
+                offset=candidate.offset,
                 score=score,
             )
 
     return nsmallest(
         5,
-        matching_completions(),
+        valid_completions(),
         key=lambda completion: (
             -completion.score,
             completion.completed_sentence,

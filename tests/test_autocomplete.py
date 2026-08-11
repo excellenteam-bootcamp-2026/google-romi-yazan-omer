@@ -6,8 +6,8 @@ from src.models import Sentence
 
 
 class TestAutocomplete(unittest.TestCase):
-    def test_returns_matching_sentence(self):
-        sentence = Sentence(
+    def test_returns_matching_candidate(self):
+        candidate = Sentence(
             text="Python is a programming language.",
             source="python.txt",
             offset=15,
@@ -17,7 +17,7 @@ class TestAutocomplete(unittest.TestCase):
             "src.autocomplete.autocomplete.calculate_score",
             return_value=24,
         ):
-            results = get_best_completions("Python", [sentence])
+            results = get_best_completions("Python", [candidate])
 
         self.assertEqual(len(results), 1)
         self.assertEqual(
@@ -28,8 +28,8 @@ class TestAutocomplete(unittest.TestCase):
         self.assertEqual(results[0].offset, 15)
         self.assertEqual(results[0].score, 24)
 
-    def test_sorts_results_and_returns_only_five(self):
-        sentences = [
+    def test_filters_sorts_and_returns_only_five(self):
+        candidates = [
             Sentence("Zulu", "test.txt", 1),
             Sentence("Beta", "test.txt", 2),
             Sentence("Alpha", "test.txt", 3),
@@ -49,19 +49,29 @@ class TestAutocomplete(unittest.TestCase):
             "Ignored": None,
         }
 
-        def fake_calculate_score(query, sentence):
-            return scores[sentence.text]
+        def fake_calculate_score(query, candidate):
+            return scores[candidate.text]
 
         with patch(
             "src.autocomplete.autocomplete.calculate_score",
             side_effect=fake_calculate_score,
-        ):
-            results = get_best_completions("query", sentences)
+        ) as matcher:
+            results = get_best_completions("query", candidates)
 
         self.assertEqual(
             [result.completed_sentence for result in results],
             ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"],
         )
+        self.assertEqual(matcher.call_count, len(candidates))
+
+    def test_returns_empty_list_when_there_are_no_candidates(self):
+        with patch(
+            "src.autocomplete.autocomplete.calculate_score"
+        ) as matcher:
+            results = get_best_completions("query", [])
+
+        self.assertEqual(results, [])
+        matcher.assert_not_called()
 
 
 if __name__ == "__main__":
