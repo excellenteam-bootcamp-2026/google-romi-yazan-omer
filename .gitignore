@@ -1,14 +1,19 @@
+# Python
 __pycache__/
 *.pyc
+
+# Virtual environments
 .venv/
 venv/
+
+# IDE
 .idea/
 .vscode/
 
-# dataset is fetched separately, not committed (120MB+)
+# Dataset is fetched separately, not committed (120MB+)
 data/Archive/*
 !data/Archive/.gitkeep
 
-# small committed dataset for local debugging (see README)
+# Small committed dataset for local debugging
 !data/Archive/sample/
 !data/Archive/sample/**
