@@ -1,62 +1,101 @@
 # Project status
 
-## What's been done (setup / foundation, on `main`)
+## Current state: all three parts implemented, tested, and integrated on `dev`
 
-- Reviewed the skeleton and confirmed the loader / matching / autocomplete split is workable for 3 parallel developers.
-- Added `src/models.py` with the shared contract: `Sentence` (text, normalized_text, source, offset) and `AutoCompleteData` (completed_sentence, source_text, offset, score).
-- Type-hinted the four interface functions against those shared types:
-  - `load_sentences(root_path: str) -> List[Sentence]`
-  - `normalize_text(text: str) -> str` — owned by Person 1 (`src/loader/normalizer.py`)
-  - `calculate_score(query: str, sentence: Sentence) -> Optional[int]` — implemented and tested (Person 2)
-  - `get_best_completions(query: str, sentences: List[Sentence]) -> List[AutoCompleteData]`
-- **Architecture update:** Person 1 now owns normalization and candidate search, not just file loading (see updated Person 1/2 sections below). `Sentence.normalized_text` is populated by Person 1 at load time; `calculate_score` no longer normalizes anything itself — it expects an already-normalized `query` and reads `sentence.normalized_text` directly. `Sentence.text` stays untouched (original casing/punctuation), since the final output must show the sentence as it appears in the source file.
-- Fixed `src/main.py` imports so it runs as a package (`python -m src.main` from repo root).
-- Added `.gitignore` rules: real dataset (`data/Archive/*`, 120MB+) excluded from git.
-- Added `data/Archive/sample/` — a small, committed dataset (incl. a nested folder) for local debugging, using the project spec's worked example sentence so scores can be checked against known values.
-- Added `tests/fixtures.py` with `TEST_SENTENCES` as ready-made `Sentence` objects, so matching/autocomplete can be tested without the loader at all.
-- Documented all of the above in `README.md` (run instructions, ownership table, sample data, worked score table).
-- Committed everything to `main` and pushed it.
-- Replaced the old unrelated branches with `feature/data-loader`, `feature/matching`, `feature/autocomplete`, pushed to origin, each tracking its remote counterpart.
+- Person 3 (Data Loader), Person 2 (Matching), and Person 1 (Autocomplete) are all
+  implemented and merged into `dev`.
+- 15/15 tests pass: `python -m unittest discover tests -v`.
+- Verified end-to-end with real files (not just mocks/fixtures): loading
+  `data/Archive/sample` through to `get_best_completions` returns correct,
+  ranked, typo-tolerant results.
 
-None of the actual algorithm logic has been written yet — that's the checklist below.
+## Person numbering (per team assignment)
+
+- **Person 1** = Autocomplete — `src/autocomplete/`, branch `feature/autocomplete`
+- **Person 2** = Matching + Scoring — `src/matching/`, branch `feature/matching`
+- **Person 3** = Data Loader — `src/loader/`, branch `feature/data-loader`
+
+## The route through the project
+
+1. **Person 3** reads every `.txt` file under `data/Archive`, and builds one
+   `Sentence` per line (original `text` + `normalized_text`).
+2. **Person 1** takes the user's query and the sentences, normalizes the query,
+   and for each sentence calls Person 2.
+3. **Person 2** checks whether the (normalized) query matches the sentence —
+   exact substring, or with at most one correction — and returns a score or `None`.
+4. **Person 1** collects the scores, drops the `None`s, sorts (score desc, then
+   alphabetically), and returns the top 5.
+
+## Shared contract (`src/models.py`)
+
+- `Sentence(text, normalized_text, source, offset)` — `text` is the original
+  line, kept exactly as in the source file (used for final display);
+  `normalized_text` is lowercase/punctuation-free/whitespace-collapsed (used
+  for matching), populated by Person 3 at load time.
+- `AutoCompleteData(completed_sentence, source_text, offset, score)` —
+  Person 1's final output shape.
 
 ---
 
-## Person 1 — Data Loader + Search (`src/loader/`, branch `feature/data-loader`)
+## Person 3 — Data Loader (`src/loader/`, branch `feature/data-loader`) — done
 
-- [ ] Recursively walk `root_path` and find every `.txt` file, at any folder depth.
-- [ ] Read each file, treating each line as one sentence.
-- [ ] For each line, build a `Sentence(text=<original line>, normalized_text=normalize_text(<line>), source=<file path>, offset=<line number>)`.
-- [x] `normalize_text` (`src/loader/normalizer.py`): lowercase, strip punctuation, collapse whitespace — done, moved here from `matching`.
-- [ ] Decide and document the offset convention (0-indexed vs 1-indexed) — tell Person 2/3, since `AutoCompleteData.offset` in the final output depends on it.
-- [ ] Decide how empty lines are handled (skip vs keep) and document it.
-- [ ] Read files as UTF-8; decide what happens on a decode error (skip file? skip line?).
-- [ ] Return the combined `List[Sentence]` across all files.
-- [ ] **Candidate search** — proposed design (n-gram/trigram inverted index), not yet finalized with the team: given a raw query, normalize it and return the shortlist of candidate `Sentence`s for Person 2 to score, instead of Person 3 scanning the whole corpus. Confirm interface shape (e.g. `get_candidates(query: str) -> List[Sentence]`) before building.
-- [ ] Write `tests/test_loader.py` using `data/Archive/sample` (has a nested subfolder specifically to test recursion) — verify file discovery, correct `source` path, and correct `offset` per line.
+- [x] Recursively finds every `.txt` file under `root_path`, any folder depth.
+- [x] Each line → one `Sentence`; `normalized_text` computed via
+      `normalize_text` (`src/loader/normalizer.py`).
+- [x] Offsets are 1-indexed, original line numbers; empty lines are skipped
+      but still count toward the line number.
+- [x] Files read as UTF-8; a file that fails to decode is skipped entirely.
+- [x] `tests/test_loader.py` — 6 tests, all passing.
+- [ ] **Not yet built:** candidate search/indexing (e.g. a trigram index) to
+      narrow the corpus before Person 2 scores it — right now Person 1 scores
+      the *entire* corpus on every query. Correctness-first for now; revisit
+      once the team wants to optimize (see Stage B in the spec).
 
 ## Person 2 — Matching (`src/matching/matcher.py`, branch `feature/matching`) — done
 
-- [x] `calculate_score(query, sentence)`: assumes `query` is already normalized and reads `sentence.normalized_text` — does **not** normalize anything itself anymore.
-  - [x] Exact substring match (start, middle, or end of the sentence).
-  - [x] Fuzzy match allowed with **at most one** correction: substitution, insertion, or deletion.
-  - [x] Base score = 2 × number of matching characters.
-  - [x] Substitution penalty by position: 1st -5, 2nd -4, 3rd -3, 4th -2, 5th+ -1.
-  - [x] Insertion/deletion penalty by position: 1st -10, 2nd -8, 3rd -6, 4th -4, 5th+ -2.
-  - [x] Returns `None` when more than one correction would be needed.
+- [x] `calculate_score(query, sentence)`: expects `query` already normalized,
+      reads `sentence.normalized_text` — does **not** normalize anything itself.
+- [x] Exact substring match (start, middle, or end of the sentence).
+- [x] Fuzzy match with **at most one** correction: substitution, insertion, or deletion.
+- [x] Base score = 2 × number of matching characters.
+- [x] Substitution penalty by position: 1st -5, 2nd -4, 3rd -3, 4th -2, 5th+ -1.
+- [x] Insertion/deletion penalty by position: 1st -10, 2nd -8, 3rd -6, 4th -4, 5th+ -2.
+- [x] Returns `None` when more than one correction would be needed.
 - [x] Verified against the worked examples in `README.md`.
 - [x] `tests/test_matcher.py` — 6 tests, all passing.
 
-## Person 3 — Autocomplete (`src/autocomplete/autocomplete.py`, branch `feature/autocomplete`)
+## Person 1 — Autocomplete (`src/autocomplete/autocomplete.py`, branch `feature/autocomplete`) — done
 
-- [ ] `get_best_completions`: run `calculate_score` over the candidate sentences (from Person 1, once that exists — full corpus for now).
-- [ ] **Open question, confirm with Person 1:** `calculate_score` needs an already-normalized `query`. Decide who normalizes the raw user input once — Person 1's search step, or `get_best_completions` itself — so it isn't normalized twice or missed.
-- [ ] Filter out non-matches (`None` scores).
-- [ ] Sort remaining matches by score descending; break ties alphabetically by the completed sentence text.
-- [ ] Take the top 5 and build `AutoCompleteData` for each (`completed_sentence` = full **original** `sentence.text`, not `normalized_text`; plus `source_text`, `offset`, `score`).
-- [ ] Write `tests/test_autocomplete.py` using `tests/fixtures.py::TEST_SENTENCES`.
+- [x] `get_best_completions(query, candidates)`: normalizes the query itself,
+      then calls `calculate_score` per candidate.
+- [x] Filters out `None`s (non-matches).
+- [x] Sorts by score descending, ties broken alphabetically.
+- [x] Returns the top 5 as `AutoCompleteData`, using each sentence's original
+      `text` (not `normalized_text`) for `completed_sentence`.
+- [x] `tests/test_autocomplete.py` — 3 tests, all passing.
 
-## After all three branches merge (whoever picks it up)
+---
 
-- [ ] `main.py`: offline phase — call `load_sentences` once at startup against the real `data/Archive` path.
-- [ ] `main.py`: online phase — REPL loop that reads typed characters, shows top-5 completions on Enter, lets the user keep typing from where they left off, and resets state on `#`.
+## Integration issues found and fixed on `dev`
+
+These all came from branches being built before the shared `Sentence.normalized_text`
+field / normalization-ownership change landed — worth knowing about, not because
+anything is still broken, but as a heads-up for future merges:
+
+- `src/loader/normalizer.py` was accidentally committed **empty** at one point — fixed.
+- `feature/data-loader`'s `load_sentences` wasn't populating `normalized_text` — fixed.
+- `feature/autocomplete`'s tests were constructing `Sentence` without `normalized_text` — fixed.
+- `get_best_completions` was passing the **raw, unnormalized** query straight into
+  `calculate_score`, which no longer normalizes anything itself — fixed (now
+  normalizes the query before scoring).
+
+## Still open / next steps
+
+- [ ] Candidate search/indexing for Person 3 — performance, not correctness;
+      full corpus scan works correctly today but won't scale to the real dataset.
+- [ ] `main.py`: offline phase (call `load_sentences` once at startup) + online
+      phase (REPL: show top-5 on Enter, keep typing from where you left off,
+      reset state on `#`).
+- [ ] Merge `dev` into `main` once the team is happy with it.
+- [ ] Unconfirmed: should `feature/matching` be renamed to `feature/matcher`
+      to match the team's branch-naming message?

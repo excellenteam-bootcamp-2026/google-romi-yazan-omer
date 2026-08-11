@@ -10,6 +10,12 @@ From the repo root (so `src` resolves as a package):
 python -m src.main
 ```
 
+## Run the tests
+
+```
+python -m unittest discover tests -v
+```
+
 ## Structure & ownership
 
 Shared contract lives in `src/models.py` (`Sentence`, `AutoCompleteData`) — do not
@@ -17,15 +23,23 @@ change these shapes without syncing with the other two owners.
 
 | Package | Owner | Responsibility |
 |---|---|---|
-| `src/loader` | Person 1 | Read all `.txt` files under `data/Archive` (recursively), normalize each line (`normalizer.py`) into `Sentence.normalized_text`, and return `Sentence` records. Also owns candidate search (narrowing the corpus down before Person 2 scores it). |
+| `src/loader` | Person 3 | Read all `.txt` files under `data/Archive` (recursively), normalize each line (`normalizer.py`) into `Sentence.normalized_text`, and return `Sentence` records. |
 | `src/matching` | Person 2 | Score an already-normalized query against a `Sentence.normalized_text` (`matcher.py`), allowing at most one correction (substitution/insertion/deletion). Does not normalize anything itself. |
-| `src/autocomplete` | Person 3 | Run the matcher over the candidate sentences, rank matches, and return the top 5 as `AutoCompleteData` using each sentence's original `text` (ties broken alphabetically). |
+| `src/autocomplete` | Person 1 | Normalize the query, run the matcher over the candidate sentences, rank matches, and return the top 5 as `AutoCompleteData` (ties broken alphabetically), using each sentence's original `text`. |
+
+## The route through the project
+
+1. **Person 3** loads and normalizes the corpus into `Sentence` records.
+2. **Person 1** normalizes the query and, for each sentence, calls Person 2.
+3. **Person 2** checks the match and returns a score or `None`.
+4. **Person 1** sorts the results and returns the top 5.
 
 ## Branches
 
-- `feature/data-loader` — Person 1
+- `feature/data-loader` — Person 3
 - `feature/matching` — Person 2
-- `feature/autocomplete` — Person 3
+- `feature/autocomplete` — Person 1
+- `dev` — integration branch; all three feature branches are merged in here
 
 ## Sample data for local debugging
 
@@ -39,9 +53,10 @@ load_sentences("data/Archive/sample")
 ```
 
 `quotes.txt` includes `"To be or not to be, that is the question."`, which has
-known worked scoring examples in the project spec — useful for Person 2 to
-sanity-check `calculate_score` against expected numbers. Note `calculate_score`
-expects an **already-normalized** query (lowercase, no punctuation):
+known worked scoring examples in the project spec — useful for sanity-checking
+`calculate_score` against expected numbers. Note `calculate_score` expects an
+**already-normalized** query (lowercase, no punctuation) — `get_best_completions`
+handles that normalization for you if you're calling it instead:
 
 | Query (pre-normalized) | Expected score | Why |
 |---|---|---|
@@ -64,6 +79,16 @@ from src.matching.matcher import calculate_score
 calculate_score("to be", TEST_SENTENCES[0])
 ```
 
+Or exercise the full pipeline at once:
+
+```python
+from src.loader.data_loader import load_sentences
+from src.autocomplete.autocomplete import get_best_completions
+
+sentences = load_sentences("data/Archive/sample")
+get_best_completions("TO BE!!", sentences)
+```
+
 ## Data loader conventions
 
 `load_sentences` recursively reads all `.txt` files under the provided root directory.
@@ -74,4 +99,6 @@ calculate_score("to be", TEST_SENTENCES[0])
 - Files are read as UTF-8.
 - If a file cannot be decoded as UTF-8, the entire file is skipped.
 - Sentence text is preserved exactly as it appears in the source file, except for line-ending characters.
-- The loader does not perform normalization, punctuation removal, matching, scoring, or ranking.
+- `normalize_text` is also owned here (`src/loader/normalizer.py`): lowercase,
+  strip punctuation, collapse whitespace. `load_sentences` uses it to populate
+  `Sentence.normalized_text` for every line.
