@@ -9,6 +9,7 @@ class TestAutocomplete(unittest.TestCase):
     def test_returns_matching_candidate(self):
         candidate = Sentence(
             text="Python is a programming language.",
+            normalized_text="python is a programming language",
             source="python.txt",
             offset=15,
         )
@@ -30,13 +31,13 @@ class TestAutocomplete(unittest.TestCase):
 
     def test_filters_sorts_and_returns_only_five(self):
         candidates = [
-            Sentence("Zulu", "test.txt", 1),
-            Sentence("Beta", "test.txt", 2),
-            Sentence("Alpha", "test.txt", 3),
-            Sentence("Gamma", "test.txt", 4),
-            Sentence("Delta", "test.txt", 5),
-            Sentence("Epsilon", "test.txt", 6),
-            Sentence("Ignored", "test.txt", 7),
+            Sentence("Zulu", "zulu", "test.txt", 1),
+            Sentence("Beta", "beta", "test.txt", 2),
+            Sentence("Alpha", "alpha", "test.txt", 3),
+            Sentence("Gamma", "gamma", "test.txt", 4),
+            Sentence("Delta", "delta", "test.txt", 5),
+            Sentence("Epsilon", "epsilon", "test.txt", 6),
+            Sentence("Ignored", "ignored", "test.txt", 7),
         ]
 
         scores = {
