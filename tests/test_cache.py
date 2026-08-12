@@ -25,6 +25,7 @@ class TestCache(unittest.TestCase):
             (
                 sentences,
                 index,
+                short_query_index,
                 loaded_from_cache,
             ) = load_or_build_cache(
                 str(root),
@@ -43,6 +44,21 @@ class TestCache(unittest.TestCase):
             self.assertIn(
                 "pyt",
                 index,
+            )
+
+            self.assertIn(
+                "p",
+                short_query_index,
+            )
+
+            self.assertIn(
+                "py",
+                short_query_index,
+            )
+
+            self.assertEqual(
+                short_query_index["py"],
+                [0],
             )
 
             self.assertTrue(
@@ -85,6 +101,7 @@ class TestCache(unittest.TestCase):
                 (
                     sentences,
                     index,
+                    short_query_index,
                     loaded_from_cache,
                 ) = load_or_build_cache(
                     str(root),
@@ -103,6 +120,16 @@ class TestCache(unittest.TestCase):
             self.assertIn(
                 "pyt",
                 index,
+            )
+
+            self.assertIn(
+                "py",
+                short_query_index,
+            )
+
+            self.assertEqual(
+                short_query_index["py"],
+                [0],
             )
 
             loader.assert_not_called()
@@ -136,7 +163,8 @@ class TestCache(unittest.TestCase):
 
             (
                 sentences,
-                _,
+                index,
+                short_query_index,
                 loaded_from_cache,
             ) = load_or_build_cache(
                 str(root),
@@ -150,6 +178,26 @@ class TestCache(unittest.TestCase):
             self.assertEqual(
                 len(sentences),
                 2,
+            )
+
+            self.assertIn(
+                "pyt",
+                index,
+            )
+
+            self.assertIn(
+                "net",
+                index,
+            )
+
+            self.assertIn(
+                "py",
+                short_query_index,
+            )
+
+            self.assertIn(
+                "ne",
+                short_query_index,
             )
 
     def test_new_source_file_invalidates_cache(self):
@@ -180,7 +228,8 @@ class TestCache(unittest.TestCase):
 
             (
                 sentences,
-                _,
+                index,
+                short_query_index,
                 loaded_from_cache,
             ) = load_or_build_cache(
                 str(root),
@@ -194,6 +243,26 @@ class TestCache(unittest.TestCase):
             self.assertEqual(
                 len(sentences),
                 2,
+            )
+
+            self.assertIn(
+                "pyt",
+                index,
+            )
+
+            self.assertIn(
+                "net",
+                index,
+            )
+
+            self.assertIn(
+                "py",
+                short_query_index,
+            )
+
+            self.assertIn(
+                "ne",
+                short_query_index,
             )
 
 

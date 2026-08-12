@@ -1,14 +1,18 @@
 import json
 import pickle
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import List, Tuple
 
 from src.loader.data_loader import load_sentences
-from src.loader.index import build_index
+from src.loader.index import (
+    ShortQueryIndex,
+    TrigramIndex,
+    build_search_indexes,
+)
 from src.models import Sentence
 
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 DEFAULT_CACHE_DIR = Path("data/cache")
 
@@ -59,12 +63,13 @@ def _load_manifest(manifest_path: Path) -> dict | None:
 
 def _save_cache(
     sentences: List[Sentence],
-    index: Dict[str, Set[int]],
+    index: TrigramIndex,
+    short_query_index: ShortQueryIndex,
     manifest: dict,
     cache_dir: Path,
 ) -> None:
     """
-    Save the prepared Sentence list and trigram index to disk.
+    Save all prepared search data to disk.
     """
     cache_dir.mkdir(
         parents=True,
@@ -79,7 +84,11 @@ def _save_cache(
 
     with temporary_data_path.open("wb") as file:
         pickle.dump(
-            (sentences, index),
+            (
+                sentences,
+                index,
+                short_query_index,
+            ),
             file,
             protocol=pickle.HIGHEST_PROTOCOL,
         )
@@ -100,16 +109,28 @@ def _save_cache(
 
 def _load_cache(
     cache_dir: Path,
-) -> Tuple[List[Sentence], Dict[str, Set[int]]]:
+) -> Tuple[
+    List[Sentence],
+    TrigramIndex,
+    ShortQueryIndex,
+]:
     """
-    Load the already prepared Sentence list and trigram index.
+    Load all prepared search data from disk.
     """
     data_path = cache_dir / CACHE_DATA_FILE
 
     with data_path.open("rb") as file:
-        sentences, index = pickle.load(file)
+        (
+            sentences,
+            index,
+            short_query_index,
+        ) = pickle.load(file)
 
-    return sentences, index
+    return (
+        sentences,
+        index,
+        short_query_index,
+    )
 
 
 def load_or_build_cache(
@@ -117,19 +138,22 @@ def load_or_build_cache(
     cache_dir: Path = DEFAULT_CACHE_DIR,
 ) -> Tuple[
     List[Sentence],
-    Dict[str, Set[int]],
+    TrigramIndex,
+    ShortQueryIndex,
     bool,
 ]:
     """
     Load prepared data from cache when the source files
     have not changed.
 
-    If the source files changed, rebuild the Sentence list
-    and trigram index and replace the old cache.
+    If the source files changed, rebuild the Sentence list,
+    trigram index, and short-query Top-5 index and replace
+    the old cache.
 
     Returns:
         sentences
         index
+        short_query_index
         loaded_from_cache
     """
     cache_dir = Path(cache_dir)
@@ -145,17 +169,23 @@ def load_or_build_cache(
     current_manifest = _build_manifest(root_path)
     cached_manifest = _load_manifest(manifest_path)
 
-    # Cache is valid.
     if (
         data_path.exists()
         and cached_manifest == current_manifest
     ):
         try:
-            sentences, index = _load_cache(
-                cache_dir
-            )
+            (
+                sentences,
+                index,
+                short_query_index,
+            ) = _load_cache(cache_dir)
 
-            return sentences, index, True
+            return (
+                sentences,
+                index,
+                short_query_index,
+                True,
+            )
 
         except (
             OSError,
@@ -165,21 +195,26 @@ def load_or_build_cache(
             ValueError,
             TypeError,
         ):
-            # Cache is damaged or incompatible.
-            # Rebuild it below.
             pass
 
-    # No valid cache exists:
-    # rebuild everything from the source files.
     sentences = load_sentences(root_path)
 
-    index = build_index(sentences)
+    (
+        index,
+        short_query_index,
+    ) = build_search_indexes(sentences)
 
     _save_cache(
         sentences,
         index,
+        short_query_index,
         current_manifest,
         cache_dir,
     )
 
-    return sentences, index, False
+    return (
+        sentences,
+        index,
+        short_query_index,
+        False,
+    )

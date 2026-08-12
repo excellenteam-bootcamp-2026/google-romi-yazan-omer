@@ -69,12 +69,14 @@ def run(root_path: str) -> None:
     (
         sentences,
         index,
+        short_query_index,
         loaded_from_cache,
     ) = load_or_build_cache(root_path)
 
     autocomplete.initialize(
         sentences,
         index,
+        short_query_index,
     )
 
     initialization_time = (

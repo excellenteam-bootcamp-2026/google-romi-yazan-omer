@@ -1,30 +1,34 @@
 from heapq import nsmallest
-from typing import Dict, Iterator, List, Optional, Set
+from typing import Iterator, List, Optional
 
-from src.loader.index import get_candidates
+from src.loader.index import (
+    ShortQueryIndex,
+    TrigramIndex,
+    get_candidates,
+)
 from src.loader.normalizer import normalize_text
 from src.matching.matcher import calculate_score
 from src.models import AutoCompleteData, Sentence
 
 
 _sentences: Optional[List[Sentence]] = None
-_index: Optional[Dict[str, Set[int]]] = None
+_index: Optional[TrigramIndex] = None
+_short_query_index: Optional[ShortQueryIndex] = None
 
 
 def initialize(
     sentences: List[Sentence],
-    index: Dict[str, Set[int]],
+    index: TrigramIndex,
+    short_query_index: Optional[ShortQueryIndex] = None,
 ) -> None:
     """
-    Store the sentences and index for future searches.
-
-    This function must be called once after loading the sentences
-    and building the trigram index.
+    Store the prepared search data for future searches.
     """
-    global _sentences, _index
+    global _sentences, _index, _short_query_index
 
     _sentences = sentences
     _index = index
+    _short_query_index = short_query_index
 
 
 def _rank_candidates(
@@ -80,6 +84,7 @@ def get_best_k_completions(
         prefix,
         _sentences,
         _index,
+        _short_query_index,
     )
 
     return _rank_candidates(
