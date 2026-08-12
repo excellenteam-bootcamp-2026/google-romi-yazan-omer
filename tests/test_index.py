@@ -398,7 +398,7 @@ class TestGetCandidates(unittest.TestCase):
 
         self.assertIn(sentences[0], candidates)
 
-    def test_short_one_edit_query_is_preserved_by_fallback(self):
+    def test_five_character_one_edit_query_uses_index_without_losing_match(self):
         sentences = [
             Sentence(
                 text="Python is useful.",
@@ -416,21 +416,21 @@ class TestGetCandidates(unittest.TestCase):
 
         index = build_index(sentences)
 
-        # "pyton" is a one-deletion version of "python",
-        # but its length is only 5, so candidate search must fall back.
+        # "pyton" is missing one character from "python".
         candidates = get_candidates(
             "pyton",
             sentences,
             index,
         )
 
+        # Preserve the valid one-edit match.
         self.assertIn(sentences[0], candidates)
 
-        # Fallback deliberately returns all sentences.
-        self.assertEqual(
-            len(candidates),
-            len(sentences),
-        )
+        # Filter the unrelated sentence.
+        self.assertNotIn(sentences[1], candidates)
 
+
+if __name__ == "__main__":
+    unittest.main()
 if __name__ == "__main__":
     unittest.main()

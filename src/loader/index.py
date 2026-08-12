@@ -1,3 +1,4 @@
+import string
 from typing import Dict, List, Set
 
 from src.loader.normalizer import normalize_text
@@ -5,25 +6,14 @@ from src.models import Sentence
 
 
 TRIGRAM_SIZE = 3
-MIN_SAFE_QUERY_LENGTH = 2 * TRIGRAM_SIZE
+MIN_INDEXED_QUERY_LENGTH = 4
+MIN_SAFE_QUERY_LENGTH = 6
+MAX_FILTER_TRIGRAMS = 4
+NORMALIZED_ALPHABET = string.ascii_lowercase + string.digits + " "
+
 
 def generate_trigrams(text: str) -> Set[str]:
-    """
-    Generate all unique character trigrams from normalized text.
-
-    Example:
-        "python" -> {"pyt", "yth", "tho", "hon"}
-
-    The input is expected to already be normalized.
-
-    If the text contains fewer than 3 characters,
-    no trigram can be created and an empty set is returned.
-
-    Time complexity: O(n)
-    Space complexity: O(n)
-
-    where n is the length of the input text.
-    """
+    """Return all unique trigrams in text."""
     if len(text) < TRIGRAM_SIZE:
         return set()
 
@@ -34,23 +24,7 @@ def generate_trigrams(text: str) -> Set[str]:
 
 
 def build_index(sentences: List[Sentence]) -> Dict[str, Set[int]]:
-    """
-    Build a trigram inverted index from normalized sentences.
-
-    Each trigram maps to the IDs of sentences containing that trigram.
-    A sentence ID is its position in the sentences list.
-
-    Example:
-        index["pyt"] = {1, 4, 20}
-
-    means that the trigram "pyt" appears in sentences
-    with IDs 1, 4, and 20.
-
-    Time complexity: O(T)
-    Space complexity: O(T)
-
-    where T is the total number of characters in all normalized sentences.
-    """
+    """Build a trigram inverted index."""
     index: Dict[str, Set[int]] = {}
 
     for sentence_id, sentence in enumerate(sentences):
@@ -65,47 +39,124 @@ def build_index(sentences: List[Sentence]) -> Dict[str, Set[int]]:
     return index
 
 
+def _generate_one_edit_variants(text: str) -> Set[str]:
+    """Generate strings within at most one edit from text."""
+    variants = {text}
+
+    for position, original_character in enumerate(text):
+        # Deletion
+        variants.add(
+            text[:position] + text[position + 1:]
+        )
+
+        # Substitution
+        for replacement in NORMALIZED_ALPHABET:
+            if replacement != original_character:
+                variants.add(
+                    text[:position]
+                    + replacement
+                    + text[position + 1:]
+                )
+
+    # Insertion
+    for position in range(len(text) + 1):
+        for inserted_character in NORMALIZED_ALPHABET:
+            variants.add(
+                text[:position]
+                + inserted_character
+                + text[position:]
+            )
+
+    return variants
+
+
+def _exact_variant_candidate_ids(
+    variant: str,
+    index: Dict[str, Set[int]],
+) -> Set[int]:
+    """Find sentences that contain every trigram of a variant."""
+    trigrams = generate_trigrams(variant)
+
+    if not trigrams:
+        return set()
+
+    postings = []
+
+    for trigram in trigrams:
+        posting = index.get(trigram)
+
+        if not posting:
+            return set()
+
+        postings.append(posting)
+
+    # Start with the smallest posting list.
+    postings.sort(key=len)
+    candidate_ids = postings[0].copy()
+
+    for posting in postings[1:]:
+        candidate_ids.intersection_update(posting)
+
+        if not candidate_ids:
+            break
+
+    return candidate_ids
+
+
+def _short_query_candidate_ids(
+    query: str,
+    index: Dict[str, Set[int]],
+) -> Set[int]:
+    """Find candidates for a query of length four or five."""
+    candidate_ids: Set[int] = set()
+
+    for variant in _generate_one_edit_variants(query):
+        candidate_ids.update(
+            _exact_variant_candidate_ids(variant, index)
+        )
+
+    return candidate_ids
+
+
 def get_candidates(
     query: str,
     sentences: List[Sentence],
     index: Dict[str, Set[int]],
 ) -> List[Sentence]:
-    """
-    Return candidate sentences that may match the user's query.
-
-    The query is normalized before searching.
-
-    For normalized queries shorter than 6 characters, trigram filtering
-    cannot safely guarantee that a valid one-edit match will retain a
-    common trigram, so all sentences are returned as candidates.
-
-    For queries of length 6 or more, candidate sentence IDs are collected
-    from the union of all matching trigram posting lists.
-
-    This function only retrieves candidates.
-    Final match validation and scoring are handled by the matching layer.
-
-    Time complexity for indexed lookup:
-        O(m + P + C)
-
-    where:
-        m = normalized query length
-        P = total posting entries examined
-        C = number of candidate sentences returned
-    """
+    """Return candidates without performing final scoring."""
     normalized_query = normalize_text(query)
 
-    # For short queries, trigram filtering is not safe enough for
-    # one-edit matching, so return all sentences as candidates.
-    if len(normalized_query) < MIN_SAFE_QUERY_LENGTH:
+    # Trigram filtering cannot safely handle 1-3 characters.
+    if len(normalized_query) < MIN_INDEXED_QUERY_LENGTH:
         return list(sentences)
 
+    # Queries of length 4-5 use all one-edit variants.
+    if len(normalized_query) < MIN_SAFE_QUERY_LENGTH:
+        candidate_ids = _short_query_candidate_ids(
+            normalized_query,
+            index,
+        )
+
+        return [
+            sentences[sentence_id]
+            for sentence_id in candidate_ids
+        ]
+
+    # One edit can damage at most three neighboring trigrams.
+    # Therefore, at least one of four different trigrams survives.
     query_trigrams = generate_trigrams(normalized_query)
+
+    selected_trigrams = sorted(
+        query_trigrams,
+        key=lambda trigram: len(index.get(trigram, ())),
+    )[:MAX_FILTER_TRIGRAMS]
 
     candidate_ids: Set[int] = set()
 
-    for trigram in query_trigrams:
-        candidate_ids.update(index.get(trigram, set()))
+    for trigram in selected_trigrams:
+        candidate_ids.update(
+            index.get(trigram, set())
+        )
 
     return [
         sentences[sentence_id]
