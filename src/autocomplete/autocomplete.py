@@ -1,12 +1,28 @@
 from heapq import nsmallest
-from typing import Iterator, List
+from typing import Dict, Iterator, List, Optional, Set
 
+from src.loader.index import get_candidates
 from src.loader.normalizer import normalize_text
 from src.matching.matcher import calculate_score
 from src.models import AutoCompleteData, Sentence
 
+_sentences: Optional[List[Sentence]] = None
+_index: Optional[Dict[str, Set[int]]] = None
 
-def get_best_completions(
+
+def initialize(sentences: List[Sentence], index: Dict[str, Set[int]]) -> None:
+    """
+    Store the offline-built sentences/index for get_best_k_completions to use.
+
+    Call this once, offline, at startup (after load_sentences + build_index).
+    get_best_k_completions does not reload files or rebuild the index itself.
+    """
+    global _sentences, _index
+    _sentences = sentences
+    _index = index
+
+
+def _rank_candidates(
     query: str,
     candidates: List[Sentence],
 ) -> List[AutoCompleteData]:
@@ -35,3 +51,20 @@ def get_best_completions(
             completion.completed_sentence,
         ),
     )
+
+
+def get_best_k_completions(prefix: str) -> List[AutoCompleteData]:
+    """
+    Return the five best completions for `prefix` (Stage A public contract).
+
+    Requires initialize(sentences, index) to have been called once, offline,
+    at startup.
+    """
+    if _sentences is None or _index is None:
+        raise RuntimeError(
+            "get_best_k_completions() called before initialize(); "
+            "call autocomplete.initialize(sentences, index) once at startup."
+        )
+
+    candidates = get_candidates(prefix, _sentences, _index)
+    return _rank_candidates(prefix, candidates)

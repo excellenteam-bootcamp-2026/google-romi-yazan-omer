@@ -1,8 +1,8 @@
 import sys
 
-from src.autocomplete.autocomplete import get_best_completions
+from src.autocomplete import autocomplete
 from src.loader.data_loader import load_sentences
-from src.loader.index import build_index, get_candidates
+from src.loader.index import build_index
 
 DEFAULT_ROOT_PATH = "data/Archive"
 
@@ -21,6 +21,7 @@ def run(root_path: str) -> None:
     print("Loading the files and preparing the system...")
     sentences = load_sentences(root_path)
     index = build_index(sentences)
+    autocomplete.initialize(sentences, index)
     print(f"The system is ready. Loaded {len(sentences)} sentences.")
 
     query = ""
@@ -39,8 +40,7 @@ def run(root_path: str) -> None:
             continue
 
         query += typed
-        candidates = get_candidates(query, sentences, index)
-        results = get_best_completions(query, candidates)
+        results = autocomplete.get_best_k_completions(query)
         _print_suggestions(query, results)
         print(query)
 

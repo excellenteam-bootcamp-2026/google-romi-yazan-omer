@@ -5,8 +5,7 @@ from src.models import Sentence
 
 
 TRIGRAM_SIZE = 3
-MIN_SAFE_QUERY_LENGTH = 6
-
+MIN_SAFE_QUERY_LENGTH = 2 * TRIGRAM_SIZE
 
 def generate_trigrams(text: str) -> Set[str]:
     """
