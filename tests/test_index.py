@@ -429,7 +429,13 @@ class TestGetCandidates(unittest.TestCase):
         # Filter the unrelated sentence.
         self.assertNotIn(sentences[1], candidates)
 
-    def test_three_character_query_uses_trigram_index_directly(self):
+    def test_three_character_query_falls_back_to_all_sentences(self):
+        """
+        Length 3 cannot safely use the index: a one-edit deletion variant
+        of a 3-character query is only 2 characters, too short to form a
+        trigram, so a deletion-type match would be structurally invisible
+        to a trigram-only lookup. Must fall back to a full scan.
+        """
         sentences = [
             Sentence(
                 text="Python is useful.",
@@ -446,15 +452,37 @@ class TestGetCandidates(unittest.TestCase):
         ]
         index = build_index(sentences)
 
-        # "pyt" is itself a single trigram, so this should narrow via a
-        # direct index lookup rather than falling back to every sentence.
         candidates = get_candidates("pyt", sentences, index)
 
-        self.assertIn(sentences[0], candidates)
-        self.assertNotIn(sentences[1], candidates)
-        self.assertLess(len(candidates), len(sentences))
+        self.assertEqual(len(candidates), len(sentences))
 
-    def test_three_character_query_with_no_match_returns_no_candidates(self):
+    def test_three_character_deletion_type_match_is_not_lost(self):
+        """
+        Adversarial regression test: a 3-character query with a deletion
+        (query has one extra character relative to the target's real
+        2-character substring) must still be found. An exact-trigram-only
+        lookup, or naively reusing the length-4/5 variant search, both
+        silently drop this case because the deletion variant is only 2
+        characters and cannot be represented as a trigram.
+        """
+        sentences = [
+            Sentence(
+                text="TARGET sentence.",
+                normalized_text="xx pn xx",
+                source="target.txt",
+                offset=1,
+            ),
+        ]
+        index = build_index(sentences)
+
+        # "ptn" is "pn" with a 't' inserted at position 1 -- a valid
+        # one-edit (deletion-from-query) match for the literal "pn"
+        # substring in the target sentence.
+        candidates = get_candidates("ptn", sentences, index)
+
+        self.assertIn(sentences[0], candidates)
+
+    def test_two_character_query_falls_back_to_all_sentences(self):
         sentences = [
             Sentence(
                 text="Python is useful.",
@@ -462,12 +490,45 @@ class TestGetCandidates(unittest.TestCase):
                 source="first.txt",
                 offset=1,
             ),
+            Sentence(
+                text="Completely unrelated.",
+                normalized_text="completely unrelated",
+                source="second.txt",
+                offset=1,
+            ),
         ]
         index = build_index(sentences)
 
-        candidates = get_candidates("zzz", sentences, index)
+        candidates = get_candidates("py", sentences, index)
 
-        self.assertEqual(candidates, [])
+        self.assertEqual(len(candidates), len(sentences))
+
+    def test_one_character_query_falls_back_to_all_sentences(self):
+        """
+        Adversarial regression test: for a length-1 query, virtually every
+        sentence is a valid candidate, since any single character is
+        within one substitution of any other single character. No index
+        could ever narrow this without risking a false negative.
+        """
+        sentences = [
+            Sentence(
+                text="Python is useful.",
+                normalized_text="python is useful",
+                source="first.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Zzz.",
+                normalized_text="zzz",
+                source="second.txt",
+                offset=1,
+            ),
+        ]
+        index = build_index(sentences)
+
+        candidates = get_candidates("q", sentences, index)
+
+        self.assertEqual(len(candidates), len(sentences))
 
     def test_long_query_survivor_trigram_is_not_lost_even_when_common(self):
         """

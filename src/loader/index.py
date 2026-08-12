@@ -11,6 +11,15 @@ MIN_SAFE_QUERY_LENGTH = 6
 MAX_FILTER_TRIGRAMS = 4
 NORMALIZED_ALPHABET = string.ascii_lowercase + string.digits + " "
 
+# A one-edit deletion variant of a query is one character shorter than the
+# query. For that variant to still be trigram-indexable (>= TRIGRAM_SIZE
+# characters), the query itself must be at least TRIGRAM_SIZE + 1 long.
+# Below this, deletion-type matches are structurally invisible to a
+# trigram-only index (no trigram can represent a 1-2 character string),
+# so candidate search cannot safely narrow anything and must scan every
+# sentence instead.
+MIN_VARIANT_SEARCH_QUERY_LENGTH = TRIGRAM_SIZE + 1
+
 
 def generate_trigrams(text: str) -> Set[str]:
     """Return all unique trigrams in text."""
@@ -123,18 +132,11 @@ def get_candidates(
     """Return candidates without performing final scoring."""
     normalized_query = normalize_text(query)
 
-    # Too short to form even one trigram (length 1-2): must scan everything.
-    if len(normalized_query) < TRIGRAM_SIZE:
+    # Length 1-3: a one-edit deletion variant would be 0-2 characters,
+    # too short to form a trigram. No index can safely narrow these
+    # without risking a false negative, so scan every sentence.
+    if len(normalized_query) < MIN_VARIANT_SEARCH_QUERY_LENGTH:
         return list(sentences)
-
-    # Length 3: the query IS one trigram, so look it up directly.
-    if len(normalized_query) == TRIGRAM_SIZE:
-        candidate_ids = index.get(normalized_query, set())
-
-        return [
-            sentences[sentence_id]
-            for sentence_id in candidate_ids
-        ]
 
     # Queries of length 4-5 use all one-edit variants.
     if len(normalized_query) < MIN_SAFE_QUERY_LENGTH:
