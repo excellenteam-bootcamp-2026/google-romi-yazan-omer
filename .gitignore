@@ -20,3 +20,6 @@ data/Archive/*
 
 # Project spec doc, not needed in the repo
 פרויקט גוגל - השלמת משפטים - גרסת 2025 (1).pdf
+
+# Generated prepared-data cache
+data/cache/
