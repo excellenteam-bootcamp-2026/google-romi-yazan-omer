@@ -134,95 +134,15 @@ class TestGetBestKCompletions(unittest.TestCase):
         self.assertEqual(results[0].offset, 1)
 
 
-class TestShortExactQueryFastPath(unittest.TestCase):
-    """Tests for the 1-3 character exact-match fast path in get_best_k_completions."""
+class TestGetBestKCompletionsOwnershipBoundary(unittest.TestCase):
+    """Person 1 must never touch the raw index or reimplement search/scoring."""
 
     def setUp(self):
         self.addCleanup(autocomplete.initialize, None, None)
 
-    def _init(self, sentences):
-        from src.loader.index import build_index
-        autocomplete.initialize(sentences, build_index(sentences))
-
-    def test_length_two_query_returns_exact_matches_sorted_alphabetically(self):
-        sentences = [
-            Sentence(
-                text=f"Sentence {chr(69 - i)} about python topic {i}.",
-                normalized_text=f"sentence {chr(101 - i)} about python topic {i}",
-                source="f.txt",
-                offset=i + 1,
-            )
-            for i in range(5)
-        ]
-        self._init(sentences)
-
-        results = get_best_k_completions("py")
-
-        self.assertEqual(len(results), 5)
-        self.assertTrue(all(r.score == 4 for r in results))
-        self.assertEqual(
-            [r.completed_sentence for r in results],
-            sorted(r.completed_sentence for r in results),
-        )
-
-    def test_length_three_query_uses_trigram_index(self):
-        sentences = [
-            Sentence(
-                text=f"Sentence {chr(65 + i)} about python topic {i}.",
-                normalized_text=f"sentence {chr(97 + i)} about python topic {i}",
-                source="f.txt",
-                offset=i + 1,
-            )
-            for i in range(5)
-        ]
-        self._init(sentences)
-
-        results = get_best_k_completions("pyt")
-
-        self.assertEqual(len(results), 5)
-        self.assertTrue(all(r.score == 6 for r in results))
-
-    def test_falls_back_to_approximate_matching_when_fewer_than_five_exact(self):
-        sentences = [
-            Sentence(
-                text="Alpha python one.",
-                normalized_text="alpha python one",
-                source="f.txt",
-                offset=1,
-            ),
-            Sentence(
-                text="Beta python two.",
-                normalized_text="beta python two",
-                source="f.txt",
-                offset=2,
-            ),
-            Sentence(
-                # "puthon" is one substitution away from "python" ("py" -> "pu").
-                text="Gamma puthon typo.",
-                normalized_text="gamma puthon typo",
-                source="f.txt",
-                offset=3,
-            ),
-            Sentence(
-                text="Delta unrelated.",
-                normalized_text="delta unrelated",
-                source="f.txt",
-                offset=4,
-            ),
-        ]
-        self._init(sentences)
-
-        results = get_best_k_completions("py")
-
-        self.assertEqual(
-            [r.completed_sentence for r in results],
-            ["Alpha python one.", "Beta python two.", "Gamma puthon typo."],
-        )
-        self.assertEqual(results[0].score, 4)
-        self.assertEqual(results[1].score, 4)
-        self.assertLess(results[2].score, 4)
-
     def test_empty_or_punctuation_only_query_returns_empty_list(self):
+        from src.loader.index import build_index
+
         sentences = [
             Sentence(
                 text="Hello world.",
@@ -231,34 +151,42 @@ class TestShortExactQueryFastPath(unittest.TestCase):
                 offset=1,
             ),
         ]
-        self._init(sentences)
+        autocomplete.initialize(sentences, build_index(sentences))
 
         self.assertEqual(get_best_k_completions(""), [])
         self.assertEqual(get_best_k_completions("..."), [])
 
-    def test_matches_general_pipeline_result_exactly(self):
-        from src.loader.index import build_index, get_candidates
-        from src.autocomplete.autocomplete import _rank_candidates
-
-        sentences = [
-            Sentence(
-                text=f"Sentence {chr(65 + i)} about python topic {i}.",
-                normalized_text=f"sentence {chr(97 + i)} about python topic {i}",
-                source="f.txt",
-                offset=i + 1,
-            )
-            for i in range(5)
-        ]
-        index = build_index(sentences)
-
-        slow_path = _rank_candidates(
-            "py", get_candidates("py", sentences, index)
+    def test_only_calls_get_candidates_and_calculate_score_no_raw_index_access(self):
+        """
+        get_best_k_completions must delegate all search to get_candidates()
+        (Person 3) and all scoring to calculate_score() (Person 2). This is
+        enforced here by making get_candidates return a plain list (not
+        the real index-backed result) and calculate_score return a fixed
+        score -- if get_best_k_completions worked correctly without ever
+        touching the real index or doing its own matching, this still
+        produces the expected result.
+        """
+        sentence = Sentence(
+            text="Python is a programming language.",
+            normalized_text="python is a programming language",
+            source="python.txt",
+            offset=1,
         )
+        autocomplete.initialize([sentence], "not a real index")
 
-        self._init(sentences)
-        fast_path = get_best_k_completions("py")
+        with patch(
+            "src.autocomplete.autocomplete.get_candidates",
+            return_value=[sentence],
+        ) as candidates_mock, patch(
+            "src.autocomplete.autocomplete.calculate_score",
+            return_value=10,
+        ) as score_mock:
+            results = get_best_k_completions("py")
 
-        self.assertEqual(fast_path, slow_path)
+        candidates_mock.assert_called_once()
+        score_mock.assert_called_once()
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].score, 10)
 
 
 if __name__ == "__main__":

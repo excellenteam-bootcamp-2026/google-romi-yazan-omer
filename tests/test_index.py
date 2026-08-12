@@ -429,6 +429,94 @@ class TestGetCandidates(unittest.TestCase):
         # Filter the unrelated sentence.
         self.assertNotIn(sentences[1], candidates)
 
+    def test_three_character_query_uses_trigram_index_directly(self):
+        sentences = [
+            Sentence(
+                text="Python is useful.",
+                normalized_text="python is useful",
+                source="first.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Completely unrelated.",
+                normalized_text="completely unrelated",
+                source="second.txt",
+                offset=1,
+            ),
+        ]
+        index = build_index(sentences)
+
+        # "pyt" is itself a single trigram, so this should narrow via a
+        # direct index lookup rather than falling back to every sentence.
+        candidates = get_candidates("pyt", sentences, index)
+
+        self.assertIn(sentences[0], candidates)
+        self.assertNotIn(sentences[1], candidates)
+        self.assertLess(len(candidates), len(sentences))
+
+    def test_three_character_query_with_no_match_returns_no_candidates(self):
+        sentences = [
+            Sentence(
+                text="Python is useful.",
+                normalized_text="python is useful",
+                source="first.txt",
+                offset=1,
+            ),
+        ]
+        index = build_index(sentences)
+
+        candidates = get_candidates("zzz", sentences, index)
+
+        self.assertEqual(candidates, [])
+
+    def test_long_query_survivor_trigram_is_not_lost_even_when_common(self):
+        """
+        Adversarial regression test for the length>=6 rare-trigram selection.
+
+        A single edit can break at most 3 of a query's trigrams, so at
+        least N-3 always survive unedited (where N is the number of
+        distinct trigrams). The algorithm only keeps the MAX_FILTER_TRIGRAMS
+        (4) trigrams with the smallest posting lists, dropping N-4. Since
+        N-4 < N-3 always, it is mathematically impossible for every
+        surviving trigram to be excluded -- but this test proves it by
+        deliberately flooding the *surviving* trigrams with huge posting
+        lists (so the "smallest posting" heuristic would naturally want to
+        drop them first) and confirming the true match is still found.
+        """
+        query = "abcdefghij"
+        # One substitution at position 6 (1-indexed): 'f' -> 'X'.
+        target_substring = "abcdeXghij"
+
+        # Trigrams of "abcdefghij" NOT touching the edited position (index 5):
+        # 'abc', 'bcd', 'cde' (before it) and 'ghi', 'hij' (after it).
+        surviving_trigrams = ["abc", "bcd", "cde", "ghi", "hij"]
+
+        noise_sentences = []
+        for i, trigram in enumerate(surviving_trigrams):
+            for j in range(20):
+                noise_sentences.append(
+                    Sentence(
+                        text="noise",
+                        normalized_text=f"zz{trigram}zz sentence number {i} {j}",
+                        source="noise.txt",
+                        offset=1,
+                    )
+                )
+
+        target = Sentence(
+            text="TARGET",
+            normalized_text=f"xx {target_substring} yy",
+            source="target.txt",
+            offset=1,
+        )
+
+        sentences = noise_sentences + [target]
+        index = build_index(sentences)
+
+        candidates = get_candidates(query, sentences, index)
+
+        self.assertIn(target, candidates)
+
 
 if __name__ == "__main__":
     unittest.main()

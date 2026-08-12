@@ -1,4 +1,5 @@
 import string
+from collections import defaultdict
 from typing import Dict, List, Set
 
 from src.loader.normalizer import normalize_text
@@ -6,7 +7,6 @@ from src.models import Sentence
 
 
 TRIGRAM_SIZE = 3
-MIN_INDEXED_QUERY_LENGTH = 4
 MIN_SAFE_QUERY_LENGTH = 6
 MAX_FILTER_TRIGRAMS = 4
 NORMALIZED_ALPHABET = string.ascii_lowercase + string.digits + " "
@@ -25,18 +25,15 @@ def generate_trigrams(text: str) -> Set[str]:
 
 def build_index(sentences: List[Sentence]) -> Dict[str, Set[int]]:
     """Build a trigram inverted index."""
-    index: Dict[str, Set[int]] = {}
+    index: Dict[str, Set[int]] = defaultdict(set)
 
     for sentence_id, sentence in enumerate(sentences):
         trigrams = generate_trigrams(sentence.normalized_text)
 
         for trigram in trigrams:
-            if trigram not in index:
-                index[trigram] = set()
-
             index[trigram].add(sentence_id)
 
-    return index
+    return dict(index)
 
 
 def _generate_one_edit_variants(text: str) -> Set[str]:
@@ -126,9 +123,18 @@ def get_candidates(
     """Return candidates without performing final scoring."""
     normalized_query = normalize_text(query)
 
-    # Trigram filtering cannot safely handle 1-3 characters.
-    if len(normalized_query) < MIN_INDEXED_QUERY_LENGTH:
+    # Too short to form even one trigram (length 1-2): must scan everything.
+    if len(normalized_query) < TRIGRAM_SIZE:
         return list(sentences)
+
+    # Length 3: the query IS one trigram, so look it up directly.
+    if len(normalized_query) == TRIGRAM_SIZE:
+        candidate_ids = index.get(normalized_query, set())
+
+        return [
+            sentences[sentence_id]
+            for sentence_id in candidate_ids
+        ]
 
     # Queries of length 4-5 use all one-edit variants.
     if len(normalized_query) < MIN_SAFE_QUERY_LENGTH:
