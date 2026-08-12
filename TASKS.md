@@ -1,101 +1,118 @@
 # Project status
 
-## Current state: all three parts implemented, tested, and integrated on `dev`
+## Current state: full Stage-A pipeline implemented, tested, and integrated on `dev`
 
-- Person 3 (Data Loader), Person 2 (Matching), and Person 1 (Autocomplete) are all
-  implemented and merged into `dev`.
-- 15/15 tests pass: `python -m unittest discover tests -v`.
-- Verified end-to-end with real files (not just mocks/fixtures): loading
-  `data/Archive/sample` through to `get_best_completions` returns correct,
-  ranked, typo-tolerant results.
+- Person 3 (Data Loader + trigram index), Person 2 (Matching), and Person 1
+  (Autocomplete) are all implemented and merged into `dev`.
+- **58/58 tests pass:** `python -m unittest discover tests -v`.
+- The program is actually runnable end-to-end: `python -m src.main [root_path]`
+  loads the corpus, builds the index, and runs an interactive REPL (type text,
+  press Enter for top-5 suggestions, keep typing to extend the query, `#` to
+  reset). Verified manually against both the sample data and the real dataset.
 
 ## Person numbering (per team assignment)
 
 - **Person 1** = Autocomplete — `src/autocomplete/`, branch `feature/autocomplete`
 - **Person 2** = Matching + Scoring — `src/matching/`, branch `feature/matching`
-- **Person 3** = Data Loader — `src/loader/`, branch `feature/data-loader`
+- **Person 3** = Data Loader + candidate search — `src/loader/`, branch `feature/data-loader`
 
 ## The route through the project
 
-1. **Person 3** reads every `.txt` file under `data/Archive`, and builds one
-   `Sentence` per line (original `text` + `normalized_text`).
-2. **Person 1** takes the user's query and the sentences, normalizes the query,
-   and for each sentence calls Person 2.
-3. **Person 2** checks whether the (normalized) query matches the sentence —
-   exact substring, or with at most one correction — and returns a score or `None`.
-4. **Person 1** collects the scores, drops the `None`s, sorts (score desc, then
-   alphabetically), and returns the top 5.
+1. **Person 3** (offline, once) reads every `.txt` file under `data/Archive`,
+   builds one `Sentence` per line, and builds a trigram inverted index over
+   all the sentences.
+2. **Person 1** (online, per query) normalizes the query and asks Person 3's
+   `get_candidates` for a narrowed shortlist of sentences that could match —
+   not the whole corpus.
+3. **Person 1** loops over that shortlist and, for each one, calls Person 2's
+   `calculate_score(query, sentence)`.
+4. **Person 2** checks whether the query matches — exact substring, or with
+   at most one correction — and returns a score or `None`. Person 2 never
+   sees the dataset, the index, or more than one sentence at a time.
+5. **Person 1** collects the valid scores, drops the `None`s, sorts (score
+   descending, ties broken alphabetically), and returns the top 5 as
+   `AutoCompleteData`.
 
 ## Shared contract (`src/models.py`)
 
 - `Sentence(text, normalized_text, source, offset)` — `text` is the original
   line, kept exactly as in the source file (used for final display);
   `normalized_text` is lowercase/punctuation-free/whitespace-collapsed (used
-  for matching), populated by Person 3 at load time.
+  for matching/indexing), populated by Person 3 at load time.
 - `AutoCompleteData(completed_sentence, source_text, offset, score)` —
-  Person 1's final output shape.
+  Person 1's final output shape, matching the spec exactly.
 
 ---
 
-## Person 3 — Data Loader (`src/loader/`, branch `feature/data-loader`) — done
+## Person 3 — Data Loader + Index (`src/loader/`, branch `feature/data-loader`) — done
 
-- [x] Recursively finds every `.txt` file under `root_path`, any folder depth.
-- [x] Each line → one `Sentence`; `normalized_text` computed via
-      `normalize_text` (`src/loader/normalizer.py`).
-- [x] Offsets are 1-indexed, original line numbers; empty lines are skipped
-      but still count toward the line number.
-- [x] Files read as UTF-8; a file that fails to decode is skipped entirely.
-- [x] `tests/test_loader.py` — 6 tests, all passing.
-- [ ] **Not yet built:** candidate search/indexing (e.g. a trigram index) to
-      narrow the corpus before Person 2 scores it — right now Person 1 scores
-      the *entire* corpus on every query. Correctness-first for now; revisit
-      once the team wants to optimize (see Stage B in the spec).
+- [x] `load_sentences(root_path)`: recursively finds every `.txt` file at any
+      folder depth, one `Sentence` per non-empty line, 1-indexed offsets,
+      UTF-8 (files that fail to decode are skipped entirely).
+- [x] `normalize_text` (`src/loader/normalizer.py`): lowercase, strip
+      punctuation, collapse whitespace.
+- [x] Trigram inverted index (`src/loader/index.py`):
+      `generate_trigrams`, `build_index` (built once, offline),
+      `get_candidates` (query → narrowed candidate list). Short queries
+      (below `MIN_SAFE_QUERY_LENGTH = 2 * TRIGRAM_SIZE`) safely fall back to
+      the full corpus, since trigram filtering can't guarantee correctness
+      below that length.
+- [x] `tests/test_loader.py`, `tests/test_normalizer.py`,
+      `tests/test_index.py`, `tests/test_loader_index_integration.py`.
 
 ## Person 2 — Matching (`src/matching/matcher.py`, branch `feature/matching`) — done
 
 - [x] `calculate_score(query, sentence)`: expects `query` already normalized,
-      reads `sentence.normalized_text` — does **not** normalize anything itself.
+      reads `sentence.normalized_text` directly — does not normalize
+      anything itself, has no knowledge of the dataset or index.
 - [x] Exact substring match (start, middle, or end of the sentence).
 - [x] Fuzzy match with **at most one** correction: substitution, insertion, or deletion.
-- [x] Base score = 2 × number of matching characters.
-- [x] Substitution penalty by position: 1st -5, 2nd -4, 3rd -3, 4th -2, 5th+ -1.
-- [x] Insertion/deletion penalty by position: 1st -10, 2nd -8, 3rd -6, 4th -4, 5th+ -2.
+- [x] Base score = 2 × number of matching characters; positional penalties
+      per the spec (substitution: -5/-4/-3/-2/-1; insertion/deletion:
+      -10/-8/-6/-4/-2).
 - [x] Returns `None` when more than one correction would be needed.
-- [x] Verified against the worked examples in `README.md`.
-- [x] `tests/test_matcher.py` — 6 tests, all passing.
+- [x] Verified against every worked example in `README.md`.
+- [x] `tests/test_matcher.py` — 6 tests.
 
 ## Person 1 — Autocomplete (`src/autocomplete/autocomplete.py`, branch `feature/autocomplete`) — done
 
-- [x] `get_best_completions(query, candidates)`: normalizes the query itself,
-      then calls `calculate_score` per candidate.
-- [x] Filters out `None`s (non-matches).
-- [x] Sorts by score descending, ties broken alphabetically.
-- [x] Returns the top 5 as `AutoCompleteData`, using each sentence's original
-      `text` (not `normalized_text`) for `completed_sentence`.
-- [x] `tests/test_autocomplete.py` — 3 tests, all passing.
+- [x] Public contract matches the spec exactly:
+      `get_best_k_completions(prefix: str) -> List[AutoCompleteData]`.
+- [x] `initialize(sentences, index)` stores the offline-built state once;
+      `get_best_k_completions` never reloads files or rebuilds the index.
+- [x] Internally: calls `get_candidates` (Person 3), then the `_rank_candidates`
+      helper loops the shortlist, calls `calculate_score` (Person 2) once per
+      candidate, filters `None`s, sorts (score desc, alphabetical tiebreak),
+      returns top 5.
+- [x] `tests/test_autocomplete.py` — 6 tests, including that `get_best_k_completions`
+      raises before `initialize()` and never touches `load_sentences`/`build_index` itself.
+
+## `main.py` — done
+
+- [x] Offline phase: `load_sentences` + `build_index` once at startup,
+      `autocomplete.initialize(sentences, index)`.
+- [x] Online phase: REPL loop — accumulates typed text across turns, shows
+      top-5 on Enter, resets on `#`, exits cleanly on EOF.
 
 ---
 
-## Integration issues found and fixed on `dev`
+## Integration issues found and fixed along the way
 
-These all came from branches being built before the shared `Sentence.normalized_text`
-field / normalization-ownership change landed — worth knowing about, not because
-anything is still broken, but as a heads-up for future merges:
-
-- `src/loader/normalizer.py` was accidentally committed **empty** at one point — fixed.
-- `feature/data-loader`'s `load_sentences` wasn't populating `normalized_text` — fixed.
-- `feature/autocomplete`'s tests were constructing `Sentence` without `normalized_text` — fixed.
-- `get_best_completions` was passing the **raw, unnormalized** query straight into
-  `calculate_score`, which no longer normalizes anything itself — fixed (now
-  normalizes the query before scoring).
+- `src/loader/normalizer.py` was accidentally committed empty at one point — fixed.
+- `feature/data-loader`'s `load_sentences` and `feature/autocomplete`'s tests
+  predated the `Sentence.normalized_text` field — fixed.
+- `get_best_completions`/`get_best_k_completions` was passing the raw,
+  unnormalized query straight into `calculate_score` — fixed.
+- `MIN_SAFE_QUERY_LENGTH` was a separately hardcoded `6`; now derived as
+  `2 * TRIGRAM_SIZE` so the two constants can't silently drift apart.
+- The trigram index existed but nothing called it before `get_best_completions`
+  — fixed by wiring `get_candidates` into the new `get_best_k_completions`.
 
 ## Still open / next steps
 
-- [ ] Candidate search/indexing for Person 3 — performance, not correctness;
-      full corpus scan works correctly today but won't scale to the real dataset.
-- [ ] `main.py`: offline phase (call `load_sentences` once at startup) + online
-      phase (REPL: show top-5 on Enter, keep typing from where you left off,
-      reset state on `#`).
-- [ ] Merge `dev` into `main` once the team is happy with it.
+- [ ] Merge `dev` into `main` once the team is happy with it (PR #1 is open:
+      `dev` → `main`).
 - [ ] Unconfirmed: should `feature/matching` be renamed to `feature/matcher`
       to match the team's branch-naming message?
+- [ ] Stage B (per spec): profiling, C++ rewrite of hot paths, Protobuf
+      storage — not started, intentionally deferred until Stage A is signed off.
