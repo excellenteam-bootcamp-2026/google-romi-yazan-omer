@@ -1,38 +1,108 @@
 # google-autocomplete
 
-Automatic sentence completion over a corpus of text files.
+Automatic sentence completion over a corpus of text files — type part of a
+sentence, get the 5 best-matching completions from the corpus (typo-tolerant,
+up to one correction).
 
-## Run
-
-From the repo root (so `src` resolves as a package):
+## Quick start
 
 ```
-python -m src.main
+python run.py
 ```
+
+That's it — no `-m` flags needed. This loads the real corpus (`data/Archive`)
+and starts an interactive prompt.
+
+To run against a tiny 6-sentence test set instead (useful for a fast sanity
+check), pass its path explicitly:
+
+```
+python run.py data/Archive/sample
+```
+
+### First run is slow — this is expected
+
+The real corpus has ~2.6 million sentences. The **first** time you run
+`python run.py`, it has to build a search index from scratch, which takes
+roughly **1.5–2 minutes**. Let it finish — don't press Ctrl+C, or you'll lose
+the work and have to rebuild from scratch next time.
+
+Once it finishes, the prepared data is saved to `data/cache/`. Every run
+after that reuses the cache and starts much faster. The cache is
+automatically rebuilt if the files under `data/Archive` change.
+
+### Using it
+
+```
+The system is ready. Loaded 2583991 sentences.
+...
+Enter your text (# to start a new sentence):
+python
+Here are 5 suggestions:
+1. ...
+2. ...
+```
+
+- Type text and press **Enter** → see the top 5 completions.
+- Keep typing and press Enter again → it continues from what you already
+  typed and re-searches.
+- Type **`#`** and press Enter → resets back to an empty query.
+- Press **Ctrl+C** (or Ctrl+Z then Enter) → exits cleanly.
 
 ## Run the tests
 
 ```
-python -m unittest discover tests -v
+python -m pytest
 ```
 
-## Structure & ownership
+or, equivalently (no extra install required):
+
+```
+python -m unittest discover tests
+```
+
+## Data
+
+| Path | What it is | In git? |
+|---|---|---|
+| `data/Archive/sample/` | Tiny 6-sentence set for fast local testing | Yes, committed |
+| `data/Archive/*.txt` | The real corpus (~120MB, ~2.6M sentences) | No — gitignored, fetched separately |
+| `data/cache/` | Auto-generated prepared index + cache | No — gitignored, rebuilt automatically |
+
+## Project structure & ownership
 
 Shared contract lives in `src/models.py` (`Sentence`, `AutoCompleteData`) — do not
-change these shapes without syncing with the other two owners.
+change these shapes without syncing with the other owners.
 
 | Package | Owner | Responsibility |
 |---|---|---|
-| `src/loader` | Person 3 | Read all `.txt` files under `data/Archive` (recursively), normalize each line (`normalizer.py`) into `Sentence.normalized_text`, and return `Sentence` records. |
-| `src/matching` | Person 2 | Score an already-normalized query against a `Sentence.normalized_text` (`matcher.py`), allowing at most one correction (substitution/insertion/deletion). Does not normalize anything itself. |
-| `src/autocomplete` | Person 1 | Normalize the query, run the matcher over the candidate sentences, rank matches, and return the top 5 as `AutoCompleteData` (ties broken alphabetically), using each sentence's original `text`. |
+| `src/loader` | Person 3 | Read all `.txt` files under a root path (recursively), normalize each line (`normalizer.py`), build the search index (`index.py`), and cache prepared data to disk (`cache.py`). |
+| `src/matching` | Person 2 | Score an already-normalized query against one `Sentence` at a time (`matcher.py`), allowing at most one correction (substitution/insertion/deletion). Has no knowledge of the dataset or index. |
+| `src/autocomplete` | Person 1 | The public entry point, `get_best_k_completions(prefix) -> List[AutoCompleteData]`. Asks Person 3 for a narrowed candidate list, scores each one via Person 2, filters/ranks, and returns the top 5 (ties broken alphabetically). |
 
-## The route through the project
+### The route through the project
 
-1. **Person 3** loads and normalizes the corpus into `Sentence` records.
-2. **Person 1** normalizes the query and, for each sentence, calls Person 2.
-3. **Person 2** checks the match and returns a score or `None`.
-4. **Person 1** sorts the results and returns the top 5.
+1. **Offline, once at startup:** `src/main.py` calls `load_or_build_cache`,
+   which loads every `.txt` file under the root path, normalizes each line,
+   and builds a search index (trigram index + a fast index for 1–2 character
+   queries). Result is cached to `data/cache/`.
+2. **Per query:** `get_best_k_completions(prefix)` asks Person 3's
+   `get_candidates()` for a shortlist of sentences that could plausibly
+   match — not the whole corpus.
+3. It scores each candidate with Person 2's `calculate_score(query, sentence)`,
+   which returns a score or `None` (no match).
+4. It drops the `None`s, sorts by score (ties broken alphabetically), and
+   returns the top 5 as `AutoCompleteData(completed_sentence, source_text,
+   offset, score)`.
+
+## Known performance limitation
+
+Queries of exactly **3 characters** currently fall back to scoring the
+*entire* corpus (no index narrows the candidate list for that length), which
+is slow on the real ~2.6M-sentence dataset — tens of seconds per query.
+Queries of length 1–2, 4–5, and 6+ are all fast (sub-few-seconds) because
+they're narrowed by an index first. This is a known issue, not a bug in the
+scoring logic itself.
 
 ## Branches
 
@@ -40,65 +110,3 @@ change these shapes without syncing with the other two owners.
 - `feature/matching` — Person 2
 - `feature/autocomplete` — Person 1
 - `dev` — integration branch; all three feature branches are merged in here
-
-## Sample data for local debugging
-
-The real corpus (`data/Archive/*`) is 120MB+ and gitignored — it isn't in the repo.
-For local dev, `data/Archive/sample/` is a small, committed set of `.txt` files
-(including a nested subfolder, to exercise recursive loading) you can point
-`load_sentences` at directly:
-
-```python
-load_sentences("data/Archive/sample")
-```
-
-`quotes.txt` includes `"To be or not to be, that is the question."`, which has
-known worked scoring examples in the project spec — useful for sanity-checking
-`calculate_score` against expected numbers. Note `calculate_score` expects an
-**already-normalized** query (lowercase, no punctuation) — `get_best_completions`
-handles that normalization for you if you're calling it instead:
-
-| Query (pre-normalized) | Expected score | Why |
-|---|---|---|
-| `to be` | 10 | exact prefix match, 5 chars incl. space |
-| `or not` | 12 | exact match, 6 chars |
-| `be that` | 14 | exact match, 7 chars (comma already removed) |
-| `2o be` | 5 | base 10, -5 wrong 1st letter |
-| `to pe` | 8 | base 10, -2 wrong 4th letter |
-| `or knot` | 8 | base 12, -4 for added 4th letter |
-| `not be` | no match | needs 2 corrections ("to" missing) |
-
-For unit tests, `tests/fixtures.py` has the same data already as `Sentence`
-objects (`TEST_SENTENCES`, including `normalized_text`), so `matching`/`autocomplete`
-can be tested without going through the loader at all:
-
-```python
-from tests.fixtures import TEST_SENTENCES
-from src.matching.matcher import calculate_score
-
-calculate_score("to be", TEST_SENTENCES[0])
-```
-
-Or exercise the full pipeline at once:
-
-```python
-from src.loader.data_loader import load_sentences
-from src.autocomplete.autocomplete import get_best_completions
-
-sentences = load_sentences("data/Archive/sample")
-get_best_completions("TO BE!!", sentences)
-```
-
-## Data loader conventions
-
-`load_sentences` recursively reads all `.txt` files under the provided root directory.
-
-- Each physical line in a text file represents one sentence.
-- Offsets are **1-indexed** and represent the original line number in the source file.
-- Empty lines are skipped, but they still count toward the original line number.
-- Files are read as UTF-8.
-- If a file cannot be decoded as UTF-8, the entire file is skipped.
-- Sentence text is preserved exactly as it appears in the source file, except for line-ending characters.
-- `normalize_text` is also owned here (`src/loader/normalizer.py`): lowercase,
-  strip punctuation, collapse whitespace. `load_sentences` uses it to populate
-  `Sentence.normalized_text` for every line.

@@ -118,7 +118,7 @@ def run(root_path: str) -> None:
         try:
             typed = input()
 
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             print()
             return
 
