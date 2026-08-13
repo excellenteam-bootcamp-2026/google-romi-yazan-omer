@@ -34,3 +34,6 @@ data/Archive/*
 
 # Generated prepared-data cache
 data/cache/
+
+# Internal working notes, not meant for the published repo
+TASKS.md
