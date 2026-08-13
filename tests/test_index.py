@@ -642,89 +642,90 @@ class TestGetCandidates(unittest.TestCase):
             ],
         )
 
-def test_three_character_query_uses_short_top_five_when_available(self):
-    sentences = [
-        Sentence(
-            text="Alpha python sentence.",
-            normalized_text="alpha python sentence",
-            source="1.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Beta python sentence.",
-            normalized_text="beta python sentence",
-            source="2.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Charlie python sentence.",
-            normalized_text="charlie python sentence",
-            source="3.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Delta python sentence.",
-            normalized_text="delta python sentence",
-            source="4.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Echo python sentence.",
-            normalized_text="echo python sentence",
-            source="5.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Zulu python sentence.",
-            normalized_text="zulu python sentence",
-            source="6.txt",
-            offset=1,
-        ),
-        Sentence(
-            text="Completely unrelated.",
-            normalized_text="completely unrelated",
-            source="7.txt",
-            offset=1,
-        ),
-    ]
+    def test_three_character_query_short_top_five_excludes_others(self):
+        sentences = [
+            Sentence(
+                text="Alpha python sentence.",
+                normalized_text="alpha python sentence",
+                source="1.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Beta python sentence.",
+                normalized_text="beta python sentence",
+                source="2.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Charlie python sentence.",
+                normalized_text="charlie python sentence",
+                source="3.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Delta python sentence.",
+                normalized_text="delta python sentence",
+                source="4.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Echo python sentence.",
+                normalized_text="echo python sentence",
+                source="5.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Zulu python sentence.",
+                normalized_text="zulu python sentence",
+                source="6.txt",
+                offset=1,
+            ),
+            Sentence(
+                text="Completely unrelated.",
+                normalized_text="completely unrelated",
+                source="7.txt",
+                offset=1,
+            ),
+        ]
 
-    (
-        index,
-        short_query_index,
-    ) = build_search_indexes(sentences)
+        (
+            index,
+            short_query_index,
+        ) = build_search_indexes(sentences)
 
-    candidates = get_candidates(
-        "pyt",
-        sentences,
-        index,
-        short_query_index,
-    )
+        candidates = get_candidates(
+            "pyt",
+            sentences,
+            index,
+            short_query_index,
+        )
 
-    self.assertEqual(
-        len(candidates),
-        5,
-    )
+        self.assertEqual(
+            len(candidates),
+            5,
+        )
 
-    self.assertEqual(
-        [sentence.text for sentence in candidates],
-        [
-            "Alpha python sentence.",
-            "Beta python sentence.",
-            "Charlie python sentence.",
-            "Delta python sentence.",
-            "Echo python sentence.",
-        ],
-    )
+        self.assertEqual(
+            [sentence.text for sentence in candidates],
+            [
+                "Alpha python sentence.",
+                "Beta python sentence.",
+                "Charlie python sentence.",
+                "Delta python sentence.",
+                "Echo python sentence.",
+            ],
+        )
 
-    self.assertNotIn(
-        sentences[5],
-        candidates,
-    )
+        self.assertNotIn(
+            sentences[5],
+            candidates,
+        )
 
-    self.assertNotIn(
-        sentences[6],
-        candidates,
-    )
+        self.assertNotIn(
+            sentences[6],
+            candidates,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
