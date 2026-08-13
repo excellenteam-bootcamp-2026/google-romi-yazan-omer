@@ -16,21 +16,20 @@ def _format_duration(seconds: float) -> str:
 
 
 def _print_suggestions(results) -> None:
+    """Print each completed sentence and its source location."""
     if not results:
         print("No suggestions.")
         return
 
     print(f"Here are {len(results)} suggestions:")
 
-    for index, result in enumerate(
-        results,
-        start=1,
-    ):
-        print(
-            f"{index}. {result.completed_sentence}  "
-            f"({result.source_text}, "
-            f"line {result.offset})"
-        )
+    for index, result in enumerate(results, start=1):
+        print()
+        print(f"Suggestion {index}:")
+        print(f"  Sentence: {result.completed_sentence}")
+        print(f"  File: {result.source_text}")
+        print(f"  Line: {result.offset}")
+        print(f"  Score: {result.score}")
 
 
 def _search_and_print(query: str) -> None:
