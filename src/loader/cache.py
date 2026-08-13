@@ -1,7 +1,7 @@
 import json
 import pickle
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from src.loader.data_loader import load_sentences
 from src.loader.index import (
@@ -49,7 +49,7 @@ def _build_manifest(root_path: str) -> dict:
     }
 
 
-def _load_manifest(manifest_path: Path) -> dict | None:
+def _load_manifest(manifest_path: Path) -> Optional[dict]:
     try:
         with manifest_path.open(
             "r",

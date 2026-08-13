@@ -1,6 +1,6 @@
 import string
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from src.loader.normalizer import normalize_text
 from src.models import Sentence
@@ -380,7 +380,7 @@ def get_candidates(
     sentences: List[Sentence],
     index: TrigramIndex,
     short_query_index:
-        ShortQueryIndex | None = None,
+        Optional[ShortQueryIndex] = None,
 ) -> List[Sentence]:
     """
     Return candidates without
