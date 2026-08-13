@@ -12,7 +12,7 @@ from src.loader.index import (
 from src.models import Sentence
 
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 DEFAULT_CACHE_DIR = Path("data/cache")
 

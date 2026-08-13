@@ -21,7 +21,7 @@ SHORT_QUERY_ALPHABET = (
     + string.digits
 )
 
-SHORT_QUERY_MAX_LENGTH = 2
+SHORT_QUERY_MAX_LENGTH = 3
 TOP_K = 5
 
 
@@ -134,8 +134,8 @@ def _add_sentence_to_search_indexes(
 
         # Build trigram index.
         if (
-            position + TRIGRAM_SIZE
-            <= len(text)
+                position + TRIGRAM_SIZE
+                <= len(text)
         ):
             trigram = text[
                 position:
@@ -145,6 +145,31 @@ def _add_sentence_to_search_indexes(
             index[trigram].add(
                 sentence_id
             )
+
+            # Three-character exact query.
+            #
+            # Reuse the same trigram that was already
+            # generated for the normal trigram index.
+            #
+            # strip() ensures that the short query does
+            # not begin or end with a space, because
+            # normalize_text() would remove such spaces
+            # from user input.
+            if trigram == trigram.strip():
+                if (
+                        last_seen.get(trigram)
+                        != sentence_id
+                ):
+                    last_seen[trigram] = (
+                        sentence_id
+                    )
+
+                    _update_short_query_top_five(
+                        trigram,
+                        sentence_id,
+                        sentences,
+                        short_query_index,
+                    )
 
         # One-character exact query.
         if (

@@ -56,8 +56,18 @@ class TestCache(unittest.TestCase):
                 short_query_index,
             )
 
+            self.assertIn(
+                "pyt",
+                short_query_index,
+            )
+
             self.assertEqual(
                 short_query_index["py"],
+                [0],
+            )
+
+            self.assertEqual(
+                short_query_index["pyt"],
                 [0],
             )
 
@@ -127,8 +137,18 @@ class TestCache(unittest.TestCase):
                 short_query_index,
             )
 
+            self.assertIn(
+                "pyt",
+                short_query_index,
+            )
+
             self.assertEqual(
                 short_query_index["py"],
+                [0],
+            )
+
+            self.assertEqual(
+                short_query_index["pyt"],
                 [0],
             )
 
@@ -196,7 +216,17 @@ class TestCache(unittest.TestCase):
             )
 
             self.assertIn(
+                "pyt",
+                short_query_index,
+            )
+
+            self.assertIn(
                 "ne",
+                short_query_index,
+            )
+
+            self.assertIn(
+                "net",
                 short_query_index,
             )
 
@@ -261,7 +291,17 @@ class TestCache(unittest.TestCase):
             )
 
             self.assertIn(
+                "pyt",
+                short_query_index,
+            )
+
+            self.assertIn(
                 "ne",
+                short_query_index,
+            )
+
+            self.assertIn(
+                "net",
                 short_query_index,
             )
 
