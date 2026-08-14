@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class Sentence:
     """One line of source text, as produced by the loader."""
     text: str
+    normalized_text: str
     source: str
     offset: int
 

@@ -1,0 +1,3 @@
+# No external dependencies. This project only uses the Python standard
+# library (dataclasses, pathlib, typing, unittest, collections, json,
+# pickle, heapq, string, re, time, sys, tempfile).
